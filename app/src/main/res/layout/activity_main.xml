@@ -10,7 +10,14 @@
         android:id="@+id/pickButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="选择视频文件 (avi/mov/wmv)" />
+        android:text="选择视频文件转换为MP4 (avi/mov/wmv)" />
+
+    <Button
+        android:id="@+id/mergeButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="选择多个视频合并" />
 
     <ProgressBar
         android:id="@+id/progressBar"
@@ -26,6 +33,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:gravity="center"
-        android:text="选择一个视频文件，开始硬件加速转换为 MP4" />
+        android:text="选择一个视频文件，开始转换或合并" />
 
 </LinearLayout>
