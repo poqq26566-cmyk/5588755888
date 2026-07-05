@@ -67,9 +67,8 @@ class MainActivity : AppCompatActivity() {
         val command = arrayOf(
             "-y",
             "-i", inputFile.absolutePath,
-            "-c:v", "libopenh264",
-            "-preset", "ultrafast",
-            "-crf", "23",
+            "-c:v", "h264_mediacodec",
+            "-b:v", "4M",
             "-c:a", "aac",
             outputFile.absolutePath
         )
