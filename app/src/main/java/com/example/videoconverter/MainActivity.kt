@@ -12,7 +12,11 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegSessionCompleteCallback
+import com.arthenica.ffmpegkit.FFprobeKit
+import com.arthenica.ffmpegkit.LogCallback
 import com.arthenica.ffmpegkit.ReturnCode
+import com.arthenica.ffmpegkit.StatisticsCallback
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -58,11 +62,15 @@ class MainActivity : AppCompatActivity() {
     private fun convertVideo(inputUri: Uri) {
         statusText.text = "准备文件..."
         progressBar.visibility = ProgressBar.VISIBLE
+        progressBar.isIndeterminate = false
+        progressBar.max = 100
+        progressBar.progress = 0
 
         val inputFile = copyUriToCache(inputUri, "input_${System.currentTimeMillis()}")
         val outputFile = File(cacheDir, "converted_${System.currentTimeMillis()}.mp4")
+        val durationMs = getDurationMs(inputFile.absolutePath)
 
-        statusText.text = "转换中..."
+        statusText.text = "转换中(硬件加速编码)... 0%"
 
         val command = arrayOf(
             "-y",
@@ -73,18 +81,41 @@ class MainActivity : AppCompatActivity() {
             outputFile.absolutePath
         )
 
-        FFmpegKit.executeAsync(toCommandString(command)) { session ->
-            runOnUiThread {
-                progressBar.visibility = ProgressBar.INVISIBLE
-                if (ReturnCode.isSuccess(session.returnCode)) {
-                    statusText.text = "转换完成，正在保存..."
-                    saveToDownloads(outputFile)
-                } else {
-    val logs = try { session.allLogsAsString } catch (e: Exception) { "" }
-    statusText.text = "转换失败 (返回码 ${session.returnCode})\n\n$logs"
+        FFmpegKit.executeAsync(
+            toCommandString(command),
+            FFmpegSessionCompleteCallback { session ->
+                runOnUiThread {
+                    progressBar.visibility = ProgressBar.INVISIBLE
+                    if (ReturnCode.isSuccess(session.returnCode)) {
+                        statusText.text = "转换完成，正在保存..."
+                        saveToDownloads(outputFile)
+                    } else {
+                        val logs = try { session.allLogsAsString } catch (e: Exception) { "" }
+                        statusText.text = "转换失败 (返回码 ${session.returnCode})\n\n$logs"
+                    }
+                    inputFile.delete()
                 }
-                inputFile.delete()
+            },
+            LogCallback { },
+            StatisticsCallback { stats ->
+                if (durationMs > 0) {
+                    val percent = ((stats.time / durationMs) * 100).toInt().coerceIn(0, 100)
+                    runOnUiThread {
+                        progressBar.progress = percent
+                        statusText.text = "转换中(硬件加速编码)... $percent%"
+                    }
+                }
             }
+        )
+    }
+
+    private fun getDurationMs(path: String): Double {
+        return try {
+            val session = FFprobeKit.getMediaInformation(path)
+            val durationStr = session.mediaInformation?.duration
+            (durationStr?.toDoubleOrNull() ?: 0.0) * 1000
+        } catch (e: Exception) {
+            0.0
         }
     }
 
@@ -133,6 +164,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun mergeWithReencode(localFiles: List<File>, listFile: File, outputFile: File) {
+        val totalDurationMs = localFiles.sumOf { getDurationMs(it.absolutePath) }
+
+        progressBar.progress = 0
+        statusText.text = "重新编码合并中... 0%"
+
         val reencodeCommand = arrayOf(
             "-y",
             "-f", "concat",
@@ -144,18 +180,31 @@ class MainActivity : AppCompatActivity() {
             outputFile.absolutePath
         )
 
-        FFmpegKit.executeAsync(toCommandString(reencodeCommand)) { session ->
-            runOnUiThread {
-                progressBar.visibility = ProgressBar.INVISIBLE
-                if (ReturnCode.isSuccess(session.returnCode)) {
-                    statusText.text = "合并完成(已重新编码)，正在保存..."
-                    saveToDownloads(outputFile)
-                } else {
-                    statusText.text = "合并失败 (返回码 ${session.returnCode})"
+        FFmpegKit.executeAsync(
+            toCommandString(reencodeCommand),
+            FFmpegSessionCompleteCallback { session ->
+                runOnUiThread {
+                    progressBar.visibility = ProgressBar.INVISIBLE
+                    if (ReturnCode.isSuccess(session.returnCode)) {
+                        statusText.text = "合并完成(已重新编码)，正在保存..."
+                        saveToDownloads(outputFile)
+                    } else {
+                        statusText.text = "合并失败 (返回码 ${session.returnCode})"
+                    }
+                    cleanup(localFiles, listFile)
                 }
-                cleanup(localFiles, listFile)
+            },
+            LogCallback { },
+            StatisticsCallback { stats ->
+                if (totalDurationMs > 0) {
+                    val percent = ((stats.time / totalDurationMs) * 100).toInt().coerceIn(0, 100)
+                    runOnUiThread {
+                        progressBar.progress = percent
+                        statusText.text = "重新编码合并中... $percent%"
+                    }
+                }
             }
-        }
+        )
     }
 
     private fun copyUriToCache(uri: Uri, name: String): File {
