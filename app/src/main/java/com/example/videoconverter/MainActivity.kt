@@ -68,6 +68,32 @@ class MainActivity : AppCompatActivity() {
 
         val inputFile = copyUriToCache(inputUri, "input_${System.currentTimeMillis()}")
         val outputFile = File(cacheDir, "converted_${System.currentTimeMillis()}.mp4")
+
+        statusText.text = "先尝试快速换容器(不重新编码)..."
+
+        val remuxCommand = arrayOf(
+            "-y",
+            "-i", inputFile.absolutePath,
+            "-c", "copy",
+            outputFile.absolutePath
+        )
+
+        FFmpegKit.executeAsync(toCommandString(remuxCommand)) { remuxSession ->
+            runOnUiThread {
+                if (ReturnCode.isSuccess(remuxSession.returnCode)) {
+                    progressBar.visibility = ProgressBar.INVISIBLE
+                    statusText.text = "快速换壳成功，正在保存..."
+                    saveToDownloads(outputFile)
+                    inputFile.delete()
+                } else {
+                    statusText.text = "该格式不能直接换壳，改用硬件加速编码..."
+                    reencodeVideo(inputFile, outputFile)
+                }
+            }
+        }
+    }
+
+    private fun reencodeVideo(inputFile: File, outputFile: File) {
         val durationMs = getDurationMs(inputFile.absolutePath)
 
         statusText.text = "转换中(硬件加速编码)... 0%"
