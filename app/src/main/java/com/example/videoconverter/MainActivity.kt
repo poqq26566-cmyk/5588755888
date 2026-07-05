@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity() {
             outputFile.absolutePath
         )
 
-        FFmpegKit.executeAsync(command) { session ->
+        FFmpegKit.executeAsync(toCommandString(command)) { session ->
             runOnUiThread {
                 progressBar.visibility = ProgressBar.INVISIBLE
                 if (ReturnCode.isSuccess(session.returnCode)) {
@@ -117,7 +117,7 @@ class MainActivity : AppCompatActivity() {
             outputFile.absolutePath
         )
 
-        FFmpegKit.executeAsync(copyCommand) { session ->
+        FFmpegKit.executeAsync(toCommandString(copyCommand)) { session ->
             runOnUiThread {
                 if (ReturnCode.isSuccess(session.returnCode)) {
                     progressBar.visibility = ProgressBar.INVISIBLE
@@ -144,7 +144,7 @@ class MainActivity : AppCompatActivity() {
             outputFile.absolutePath
         )
 
-        FFmpegKit.executeAsync(reencodeCommand) { session ->
+        FFmpegKit.executeAsync(toCommandString(reencodeCommand)) { session ->
             runOnUiThread {
                 progressBar.visibility = ProgressBar.INVISIBLE
                 if (ReturnCode.isSuccess(session.returnCode)) {
@@ -165,6 +165,11 @@ class MainActivity : AppCompatActivity() {
         }
         return file
     }
+
+    private fun toCommandString(args: Array<String>): String =
+        args.joinToString(" ") { arg ->
+            if (arg.contains(" ")) "\"$arg\"" else arg
+        }
 
     private fun cleanup(files: List<File>, listFile: File) {
         files.forEach { it.delete() }
