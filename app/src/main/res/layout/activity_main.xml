@@ -20,12 +20,14 @@
         android:text="选择多个视频合并" />
 
     <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:visibility="invisible" />
+    android:id="@+id/progressBar"
+    style="?android:attr/progressBarStyleHorizontal"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="24dp"
+    android:max="100"
+    android:indeterminate="false"
+    android:visibility="invisible" />
 
     <ScrollView
         android:layout_width="match_parent"
