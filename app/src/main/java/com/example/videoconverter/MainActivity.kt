@@ -138,8 +138,8 @@ class MainActivity : AppCompatActivity() {
             "-f", "concat",
             "-safe", "0",
             "-i", listFile.absolutePath,
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
+            "-c:v", "h264_mediacodec",
+            "-b:v", "4M",
             "-c:a", "aac",
             outputFile.absolutePath
         )
