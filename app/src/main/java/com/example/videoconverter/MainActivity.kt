@@ -81,7 +81,8 @@ class MainActivity : AppCompatActivity() {
                     statusText.text = "转换完成，正在保存..."
                     saveToDownloads(outputFile)
                 } else {
-                    statusText.text = "转换失败 (返回码 ${session.returnCode})"
+    val logs = try { session.allLogsAsString } catch (e: Exception) { "" }
+    statusText.text = "转换失败 (返回码 ${session.returnCode})\n\n$logs"
                 }
                 inputFile.delete()
             }
