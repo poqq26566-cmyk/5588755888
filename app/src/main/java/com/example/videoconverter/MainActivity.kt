@@ -103,7 +103,11 @@ class MainActivity : AppCompatActivity() {
             "-i", inputFile.absolutePath,
             "-c:v", "h264_mediacodec",
             "-b:v", "4M",
+            "-profile:v", "baseline",
+            "-level", "3.0",
+            "-pix_fmt", "yuv420p",
             "-c:a", "aac",
+            "-ar", "44100",
             outputFile.absolutePath
         )
 
@@ -202,7 +206,11 @@ class MainActivity : AppCompatActivity() {
             "-i", listFile.absolutePath,
             "-c:v", "h264_mediacodec",
             "-b:v", "4M",
+            "-profile:v", "baseline",
+            "-level", "3.0",
+            "-pix_fmt", "yuv420p",
             "-c:a", "aac",
+            "-ar", "44100",
             outputFile.absolutePath
         )
 
