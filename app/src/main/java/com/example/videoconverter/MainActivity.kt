@@ -204,16 +204,36 @@ FFmpegKit.executeAsync(toCommandString(copyCommand)) { session ->
     }
 
     private fun mergeWithReencode(localFiles: List<File>, listFile: File, outputFile: File) {
-        val totalDurationMs = localFiles.sumOf { getDurationMs(it.absolutePath) }
+    val totalDurationMs = localFiles.sumOf { getDurationMs(it.absolutePath) }
 
-        progressBar.progress = 0
-        statusText.text = "重新编码合并中... 0%"
+    progressBar.progress = 0
+    statusText.text = "重新编码合并中... 0%"
 
-        val reencodeCommand = arrayOf(
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", listFile.absolutePath,
+    // 取所有片段里最大的宽高作为统一目标分辨率(转成偶数，编码器要求)
+    val dims = localFiles.map { getVideoDimensions(it.absolutePath) }
+    val targetWidth = dims.maxOf { it.first }.let { if (it % 2 != 0) it + 1 else it }
+    val targetHeight = dims.maxOf { it.second }.let { if (it % 2 != 0) it + 1 else it }
+
+    // 用 filter_complex 把每段先统一分辨率/帧率/像素格式，再用 concat 滤镜拼接，
+    // 避免片段规格不一致导致部分黑屏/无画面
+    val filterBuilder = StringBuilder()
+    val concatInputs = StringBuilder()
+    localFiles.indices.forEach { i ->
+        filterBuilder.append(
+            "[$i:v:0]scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease," +
+                "pad=$targetWidth:$targetHeight:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v$i];"
+        )
+        filterBuilder.append("[$i:a:0]aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a$i];")
+        concatInputs.append("[v$i][a$i]")
+    }
+    filterBuilder.append("${concatInputs}concat=n=${localFiles.size}:v=1:a=1[outv][outa]")
+
+    val inputArgs = localFiles.flatMap { listOf("-i", it.absolutePath) }
+
+    val reencodeCommand = (
+        listOf("-y") + inputArgs + listOf(
+            "-filter_complex", filterBuilder.toString(),
+            "-map", "[outv]", "-map", "[outa]",
             "-c:v", "h264_mediacodec",
             "-b:v", "4M",
             "-profile:v", "baseline",
@@ -221,36 +241,49 @@ FFmpegKit.executeAsync(toCommandString(copyCommand)) { session ->
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-ar", "44100",
-            "-movflags", "+faststart",   // 新增
+            "-movflags", "+faststart",
             outputFile.absolutePath
         )
+    ).toTypedArray()
 
-        FFmpegKit.executeAsync(
-            toCommandString(reencodeCommand),
-            FFmpegSessionCompleteCallback { session ->
-                runOnUiThread {
-                    progressBar.visibility = ProgressBar.INVISIBLE
-                    if (ReturnCode.isSuccess(session.returnCode)) {
-                        statusText.text = "合并完成(已重新编码)，正在保存..."
-                        saveToDownloads(outputFile)
-                    } else {
-                        statusText.text = "合并失败 (返回码 ${session.returnCode})"
-                    }
-                    cleanup(localFiles, listFile)
+    FFmpegKit.executeAsync(
+        toCommandString(reencodeCommand),
+        FFmpegSessionCompleteCallback { session ->
+            runOnUiThread {
+                progressBar.visibility = ProgressBar.INVISIBLE
+                if (ReturnCode.isSuccess(session.returnCode)) {
+                    statusText.text = "合并完成(已重新编码)，正在保存..."
+                    saveToDownloads(outputFile)
+                } else {
+                    statusText.text = "合并失败 (返回码 ${session.returnCode})"
                 }
-            },
-            LogCallback { },
-            StatisticsCallback { stats ->
-                if (totalDurationMs > 0) {
-                    val percent = ((stats.time / totalDurationMs) * 100).toInt().coerceIn(0, 100)
-                    runOnUiThread {
-                        progressBar.progress = percent
-                        statusText.text = "重新编码合并中... $percent%"
-                    }
+                cleanup(localFiles, listFile)
+            }
+        },
+        LogCallback { },
+        StatisticsCallback { stats ->
+            if (totalDurationMs > 0) {
+                val percent = ((stats.time / totalDurationMs) * 100).toInt().coerceIn(0, 100)
+                runOnUiThread {
+                    progressBar.progress = percent
+                    statusText.text = "重新编码合并中... $percent%"
                 }
             }
-        )
+        }
+    )
+}
+
+private fun getVideoDimensions(path: String): Pair<Int, Int> {
+    return try {
+        val info = FFprobeKit.getMediaInformation(path)?.mediaInformation
+        val vStream = info?.streams?.firstOrNull { it.type == "video" }
+        val w = vStream?.width?.toString()?.toIntOrNull() ?: 1280
+        val h = vStream?.height?.toString()?.toIntOrNull() ?: 720
+        w to h
+    } catch (e: Exception) {
+        1280 to 720
     }
+}
 
     private fun copyUriToCache(uri: Uri, name: String): File {
         val file = File(cacheDir, name)
