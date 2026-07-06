@@ -170,27 +170,37 @@ class MainActivity : AppCompatActivity() {
         statusText.text = "合并中(无损快速拼接)..."
 
         val copyCommand = arrayOf(
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", listFile.absolutePath,
-            "-c", "copy",
-            outputFile.absolutePath
-        )
+    "-y",
+    "-f", "concat",
+    "-safe", "0",
+    "-i", listFile.absolutePath,
+    "-c", "copy",
+    "-movflags", "+faststart",
+    outputFile.absolutePath
+)
 
-        FFmpegKit.executeAsync(toCommandString(copyCommand)) { session ->
-            runOnUiThread {
-                if (ReturnCode.isSuccess(session.returnCode)) {
-                    progressBar.visibility = ProgressBar.INVISIBLE
-                    statusText.text = "合并完成，正在保存..."
-                    saveToDownloads(outputFile)
-                    cleanup(localFiles, listFile)
-                } else {
-                    statusText.text = "格式不完全一致，改用重新编码合并..."
-                    mergeWithReencode(localFiles, listFile, outputFile)
-                }
-            }
+val expectedDurationMs = localFiles.sumOf { getDurationMs(it.absolutePath) }
+
+FFmpegKit.executeAsync(toCommandString(copyCommand)) { session ->
+    runOnUiThread {
+        val actualDurationMs = getDurationMs(outputFile.absolutePath)
+        // ffmpeg 的 concat+copy 即使源文件格式不完全一致，也可能返回"成功"，
+        // 但生成的文件实际无法播放。这里额外用时长做一次合理性校验：
+        // 如果输出时长明显小于各段之和，说明拼接结果不可信，强制回退重新编码。
+        val durationLooksValid = expectedDurationMs <= 0 ||
+            actualDurationMs >= expectedDurationMs * 0.9
+
+        if (ReturnCode.isSuccess(session.returnCode) && durationLooksValid) {
+            progressBar.visibility = ProgressBar.INVISIBLE
+            statusText.text = "合并完成，正在保存..."
+            saveToDownloads(outputFile)
+            cleanup(localFiles, listFile)
+        } else {
+            statusText.text = "快速拼接结果不可靠，改用重新编码合并..."
+            mergeWithReencode(localFiles, listFile, outputFile)
         }
+    }
+}
     }
 
     private fun mergeWithReencode(localFiles: List<File>, listFile: File, outputFile: File) {
@@ -211,6 +221,7 @@ class MainActivity : AppCompatActivity() {
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-ar", "44100",
+            "-movflags", "+faststart",   // 新增
             outputFile.absolutePath
         )
 
